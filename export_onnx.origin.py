@@ -89,7 +89,7 @@ def export_clip_model():
     tokens = torch.zeros(1, 77, dtype=torch.int32)
     input_names = ["input_ids"]
     output_names = ["last_hidden_state"]
-    # dynamic_axes = {"input_ids": {1: "S"}, "last_hidden_state": {1: "S"}}
+    dynamic_axes = {"input_ids": {1: "S"}, "last_hidden_state": {1: "S"}}
 
     torch.onnx.export(
         clip_model,
@@ -100,7 +100,7 @@ def export_clip_model():
         do_constant_folding=True,
         input_names=input_names,
         output_names=output_names,
-        # dynamic_axes=dynamic_axes,
+        dynamic_axes=dynamic_axes,
     )
     print("======================= CLIP model export onnx done!")
 
@@ -116,122 +116,16 @@ def export_clip_model():
 
 def export_control_net_model():
     control_net = hk.model.control_model
-    # control_net = hk.model.control_model.cpu()
-
-    x_noisy = torch.randn(1, 4, 32, 48, dtype=torch.float32)
-    hint = torch.randn(1, 3, 256, 384, dtype=torch.float32)
-    timestep = torch.tensor([1], dtype=torch.int32)
-    context = torch.randn(1, 77, 768, dtype=torch.float32)
-
-    input_names = ["x_noisy", "hint", "timestep", "context"]
-    output_names = ["latent"]
-
-    onnx_path = "./onnx/ControlNet.onnx"
-
-    torch.onnx.export(
-        control_net,
-        (x_noisy, hint, timestep, context),
-        onnx_path,
-        verbose=True,
-        opset_version=18,
-        do_constant_folding=True,
-        input_names=input_names,
-        keep_initializers_as_inputs=True
-    )
-
-    # import pdb; pdb.set_trace()
-    outputs = control_net(x_noisy, hint, timestep, context)
-
-    input_dicts = {"x_noisy": x_noisy.numpy(), "hint": hint.numpy(), "timestep": timestep.numpy(), "context": context.numpy()}
-    onnxruntime_check(onnx_path, input_dicts, outputs)
 
 
 def export_controlled_unet_model():
     controlled_unet_mdoel = hk.model.model.diffusion_model
-
-    x_noisy = torch.randn(1, 4, 32, 48, dtype=torch.float32)
-    timestep = torch.tensor([1], dtype=torch.int32)
-    context = torch.randn(1, 77, 768, dtype=torch.float32)
-
-    # control 为一个list 里面为tensor 13个
-    control_list = [
-        torch.randn(1, 320, 32, 48, dtype=torch.float32),
-        torch.randn(1, 320, 32, 48, dtype=torch.float32),
-        torch.randn(1, 320, 32, 48, dtype=torch.float32),
-        torch.randn(1, 320, 16, 24, dtype=torch.float32),
-        torch.randn(1, 640, 16, 24, dtype=torch.float32),
-        torch.randn(1, 640, 16, 24, dtype=torch.float32),
-        torch.randn(1, 640, 8, 12, dtype=torch.float32),
-        torch.randn(1, 1280, 8, 12, dtype=torch.float32),
-        torch.randn(1, 1280, 8, 12, dtype=torch.float32),
-        torch.randn(1, 1280, 4, 6, dtype=torch.float32),
-        torch.randn(1, 1280, 4, 6, dtype=torch.float32),
-        torch.randn(1, 1280, 4, 6, dtype=torch.float32),
-        torch.randn(1, 1280, 4, 6, dtype=torch.float32),
-    ]
-
-    input_names = ["x_noisy", "timestep", "context"]
-    for i in range(0, len(control_list)):
-        input_names.append("control" + str(i))
-
-    output_names = ["latent"]
-
-    onnx_path = "./onnx/ControlledUnet"
-    os.makedirs(onnx_path, exist_ok=True)
-    onnx_path = onnx_path + "/ControlledUnet.onnx"
-
-    torch.onnx.export(
-        controlled_unet_mdoel,
-        (x_noisy, timestep, context, control_list),
-        onnx_path,
-        verbose=True,
-        opset_version=18,
-        do_constant_folding=True,
-        input_names=input_names,
-        output_names=output_names,
-    )
-
-    # verify onnx model
-    input_dicts = {"x_noisy": x_noisy.numpy(), "timestep": timestep.numpy(), "context": context.numpy()}
-    for i in range(0, len(control_list)):
-        input_dicts["control" + str(i)] = control_list[i].numpy()
-
-    # TODO: controlled_unet_mdoel will make control_list = []
-    output = controlled_unet_mdoel(x_noisy, timestep, context, control_list)
-
-    onnxruntime_check(onnx_path, input_dicts, [output])
-
 
 def export_decoder_model():
     # control_net = hk.model.control_model
 
     decode_model = hk.model.first_stage_model
     decode_model.forward = decode_model.decode
-
-    latent = torch.randn(1, 4, 32, 48, dtype=torch.float32)
-
-    input_names = ["latent"]
-    output_names = ["images"]
-
-    onnx_path = "./onnx/Decoder.onnx"
-
-    # import pdb; pdb.set_trace()
-    ret = decode_model(latent)
-
-    torch.onnx.export(
-        decode_model,
-        # decode_model.cpu(),
-        (latent),
-        onnx_path,
-        verbose=True,
-        opset_version=18,
-        do_constant_folding=True,
-        input_names=input_names,
-        keep_initializers_as_inputs=True
-    )
-
-    input_dicts = {"latent": latent.numpy()}
-    onnxruntime_check(onnx_path, input_dicts, [ret])
 
 def main():
     export_clip_model()
